@@ -13,5 +13,5 @@
 }
 
 .gallery-card {
-    @apply relative overflow-hidden rounded-[2rem] bg-slate-900 border border-white/5 group cursor-zoom-in;
+    @apply relative overflow-hidden rounded-[2rem] bg-slate-900 border border-white/5 cursor-zoom-in;
 }

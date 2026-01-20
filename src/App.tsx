@@ -86,7 +86,7 @@ function App() {
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ delay: idx * 0.1 }}
-                            className="gallery-card"
+                            className="gallery-card group"
                             onClick={() => setSelectedImage(img)}
                         >
                             <img src={img.url} alt={img.title} className="w-full aspect-[4/5] object-cover group-hover:scale-110 transition-transform duration-700" />

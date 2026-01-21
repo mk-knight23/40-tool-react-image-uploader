@@ -3,11 +3,11 @@
 ✨ Professional Repository Showcase Template
 
 ## Live Deployments
+- Netlify: https://17-react-image-uploader-mkazi.netlify.app
+- GitHub Pages: https://mk-knight23.github.io/17-react-image-uploader/
 
-- **GitHub Pages:** https://mk-knight23.github.io/17-react-image-uploader/
-- **Vercel:** https://17-react-image-uploader.vercel.app
-
-Status: 🟡 GH Pages Live | Vercel Pending (Daily Limit)
+Status: 🟢 Live
+Last Updated: 2026-01-21T14:20:00+05:30
 
 ## Features
 - 📱 Mobile Responsive

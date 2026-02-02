@@ -423,11 +423,16 @@ function App() {
       {/* Footer */}
       <footer className="border-t border-white/5 py-8 px-6 mt-20">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-xs font-black uppercase tracking-[0.3em] text-gray-500">
-            Made with <Flame className="w-4 h-4 inline text-play-pink" /> by PixelPlayground
-          </p>
+          <div className="text-center md:text-left">
+            <p className="text-play-pink text-xs font-bold uppercase tracking-[0.3em] mb-1">
+              Made by MK — Musharraf Kazi
+            </p>
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-gray-500">
+              Made with <Flame className="w-4 h-4 inline text-play-pink" /> by PixelPlayground
+            </p>
+          </div>
           <p className="text-xs font-bold uppercase tracking-wider text-gray-600">
-            18/30 Experimental Editions
+            © 2026 PixelPlayground
           </p>
         </div>
       </footer>

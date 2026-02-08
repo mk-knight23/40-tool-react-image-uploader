@@ -22,7 +22,6 @@ import {
   Settings,
   Crop,
   RotateCcw,
-  Flip,
   Save,
   CloudUpload,
   Link,
@@ -36,9 +35,11 @@ import {
 } from 'lucide-react';
 import ImageCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import { toast } from 'react-hot-toast';
+import * as storageService from './firebase/storage';
 
 interface GalleryImage {
-  id: number;
+  id: string | number;
   url: string;
   title: string;
   category: string;
@@ -203,50 +204,71 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileUploadRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const savedImages = localStorage.getItem('uploadedImages');
-    if (savedImages) {
-      setImages(JSON.parse(savedImages));
+  const loadImages = async () => {
+    try {
+      const cloudImages = await storageService.listImages();
+      const galleryImages: GalleryImage[] = cloudImages.map(img => ({
+        ...img,
+        title: img.name.replace(/^\d+_/, '').replace(/\.[^/.]+$/, ''),
+        category: 'Art', // Default
+        tags: [],
+        quality: 90,
+        format: img.type.split('/')[1] || 'jpeg'
+      }));
+      setImages(prev => {
+        // Merge cloud images with default/existing, avoiding duplicates
+        const existingIds = new Set(prev.map(i => i.id));
+        const newImages = galleryImages.filter(i => !existingIds.has(i.id));
+        return [...newImages, ...prev];
+      });
+    } catch (error) {
+      console.error('Failed to load images from cloud:', error);
+      toast.error('Failed to sync with cloud storage');
     }
+  };
+
+  useEffect(() => {
+    loadImages();
   }, []);
 
   useEffect(() => {
     localStorage.setItem('uploadedImages', JSON.stringify(images));
   }, [images]);
 
-  const handleFileSelect = (files: FileList | null) => {
+  const handleFileSelect = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
-      return;
+
+    const loadingToast = toast.loading(`Uploading ${file.name}...`);
+
+    try {
+      setUploadPreview(URL.createObjectURL(file));
+
+      const downloadUrl = await storageService.uploadImage(file, (progress) => {
+        // We could show progress in UI if needed, for now toast is fine
+      });
+
+      const newImage: GalleryImage = {
+        id: Date.now(),
+        url: downloadUrl,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        category: 'Art',
+        size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
+        liked: false,
+        tags: [],
+        uploadDate: new Date(),
+        quality: imageSettings.quality,
+        format: imageSettings.format
+      };
+
+      setImages(prev => [newImage, ...prev]);
+      toast.success('Upload successful!', { id: loadingToast });
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      toast.error(error.message || 'Upload failed', { id: loadingToast });
+    } finally {
+      setUploadPreview(null);
     }
-    if (file.size > 10 * 1024 * 1024) {
-      alert('File size must be less than 10MB');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      setUploadPreview(result);
-      setTimeout(() => {
-        const newImage: GalleryImage = {
-          id: Date.now(),
-          url: result,
-          title: file.name.replace(/\.[^/.]+$/, ''),
-          category: 'Art',
-          size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-          liked: false,
-          tags: [],
-          uploadDate: new Date(),
-          quality: imageSettings.quality,
-          format: imageSettings.format
-        };
-        setImages(prev => [newImage, ...prev]);
-        setUploadPreview(null);
-      }, 1500);
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -265,14 +287,28 @@ function App() {
     setIsDragging(false);
   };
 
-  const toggleLike = (id: number) => {
+  const toggleLike = (id: string | number) => {
     setImages(images.map(img =>
       img.id === id ? { ...img, liked: !img.liked } : img
     ));
   };
 
-  const deleteImage = (id: number) => {
-    setImages(images.filter(img => img.id !== id));
+  const deleteImage = async (image: GalleryImage) => {
+    const confirmDelete = window.confirm(`Delete ${image.title}?`);
+    if (!confirmDelete) return;
+
+    try {
+      // If it has a fullPath, it's in cloud storage
+      const storageFile = (image as any).fullPath;
+      if (storageFile) {
+        await storageService.deleteImage(storageFile);
+      }
+      setImages(images.filter(img => img.id !== image.id));
+      toast.success('Image deleted');
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Failed to delete image from cloud');
+    }
   };
 
   const openImageEditor = (image: GalleryImage) => {
@@ -299,10 +335,11 @@ function App() {
   });
 
   const createShareLink = (image: GalleryImage) => {
-    const link = `${window.location.origin}/image/${image.id}`;
+    const link = image.url; // Use real URL
     setShareLink(link);
     setIsSharing(true);
     navigator.clipboard.writeText(link);
+    toast.success('Link copied to clipboard');
   };
 
   const createAlbum = () => {
@@ -414,11 +451,10 @@ function App() {
             <button
               key={key}
               onClick={() => setCurrentView(key as ViewMode)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                currentView === key
-                  ? 'bg-gradient-to-r from-play-purple to-play-pink text-white'
-                  : 'bg-play-surface text-gray-400 hover:text-white'
-              }`}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${currentView === key
+                ? 'bg-gradient-to-r from-play-purple to-play-pink text-white'
+                : 'bg-play-surface text-gray-400 hover:text-white'
+                }`}
             >
               <mode.icon size={16} className="inline mr-2" />
               {mode.label}
@@ -551,7 +587,7 @@ function App() {
                               <Share2 size={16} />
                             </button>
                             <button
-                              onClick={() => deleteImage(image.id)}
+                              onClick={() => deleteImage(image)}
                               className="p-2 bg-red-500/20 backdrop-blur rounded-lg hover:bg-red-500/30 transition-all"
                             >
                               <X size={16} />
@@ -573,7 +609,7 @@ function App() {
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="flex gap-1">
-                            {image.tags.slice(0, 3).map(tag => (
+                            {image.tags.slice(0, 3).map((tag: string) => (
                               <span key={tag} className="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded-full">
                                 #{tag}
                               </span>
@@ -713,7 +749,7 @@ function App() {
                     <label className="block text-sm font-medium mb-2">Default Format</label>
                     <select
                       value={imageSettings.format}
-                      onChange={(e) => setImageSettings({...imageSettings, format: e.target.value})}
+                      onChange={(e) => setImageSettings({ ...imageSettings, format: e.target.value })}
                       className="w-full px-4 py-2 bg-play-surface rounded-lg"
                     >
                       {FORMATS.map(format => (
@@ -725,7 +761,7 @@ function App() {
                     <label className="block text-sm font-medium mb-2">Default Quality</label>
                     <select
                       value={imageSettings.quality}
-                      onChange={(e) => setImageSettings({...imageSettings, quality: parseInt(e.target.value)})}
+                      onChange={(e) => setImageSettings({ ...imageSettings, quality: parseInt(e.target.value) })}
                       className="w-full px-4 py-2 bg-play-surface rounded-lg"
                     >
                       {QUALITIES.map(quality => (
@@ -802,12 +838,11 @@ function App() {
                 <div className="lg:col-span-2">
                   <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4">
                     <ImageCrop
-                      src={selectedImage.url}
                       crop={editState.crop}
-                      onChange={(crop) => setEditState({...editState, crop})}
-                      style={{ maxWidth: '100%' }}
-                      imageStyle={{ width: '100%' }}
-                    />
+                      onChange={(c: any) => setEditState({ ...editState, crop: c })}
+                    >
+                      <img src={selectedImage.url} alt="Crop me" />
+                    </ImageCrop>
                   </div>
                 </div>
 
@@ -816,28 +851,28 @@ function App() {
                     <h3 className="font-semibold mb-3">Crop & Transform</h3>
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => setEditState({...editState, rotation: editState.rotation - 90})}
+                        onClick={() => setEditState({ ...editState, rotation: editState.rotation - 90 })}
                         className="p-3 bg-play-surface rounded-lg hover:bg-gray-700 transition-colors flex flex-col items-center gap-1"
                       >
                         <RotateCcw size={20} />
                         <span className="text-sm">Rotate Left</span>
                       </button>
                       <button
-                        onClick={() => setEditState({...editState, rotation: editState.rotation + 90})}
+                        onClick={() => setEditState({ ...editState, rotation: editState.rotation + 90 })}
                         className="p-3 bg-play-surface rounded-lg hover:bg-gray-700 transition-colors flex flex-col items-center gap-1"
                       >
                         <RotateCcw size={20} className="rotate-90" />
                         <span className="text-sm">Rotate Right</span>
                       </button>
                       <button
-                        onClick={() => setEditState({...editState, crop: {unit: 'px', width: 300, height: 300}})}
+                        onClick={() => setEditState({ ...editState, crop: { unit: 'px', width: 300, height: 300 } })}
                         className="p-3 bg-play-surface rounded-lg hover:bg-gray-700 transition-colors flex flex-col items-center gap-1"
                       >
                         <Crop size={20} />
                         <span className="text-sm">Reset Crop</span>
                       </button>
                       <button
-                        onClick={() => setEditState({...editState, brightness: 100, contrast: 100, saturation: 100})}
+                        onClick={() => setEditState({ ...editState, brightness: 100, contrast: 100, saturation: 100 })}
                         className="p-3 bg-play-surface rounded-lg hover:bg-gray-700 transition-colors flex flex-col items-center gap-1"
                       >
                         <Sliders size={20} />
@@ -854,7 +889,7 @@ function App() {
                         <input
                           type="text"
                           value={selectedImage.title}
-                          onChange={(e) => setSelectedImage({...selectedImage, title: e.target.value})}
+                          onChange={(e) => setSelectedImage({ ...selectedImage, title: e.target.value })}
                           className="w-full px-3 py-2 bg-play-surface rounded-lg"
                         />
                       </div>
@@ -862,7 +897,7 @@ function App() {
                         <label className="block text-sm font-medium mb-1">Category</label>
                         <select
                           value={selectedImage.category}
-                          onChange={(e) => setSelectedImage({...selectedImage, category: e.target.value})}
+                          onChange={(e) => setSelectedImage({ ...selectedImage, category: e.target.value })}
                           className="w-full px-3 py-2 bg-play-surface rounded-lg"
                         >
                           {CATEGORIES.filter(c => c !== 'All').map(category => (
@@ -875,7 +910,7 @@ function App() {
                         <input
                           type="text"
                           value={selectedImage.tags.join(', ')}
-                          onChange={(e) => setSelectedImage({...selectedImage, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)})}
+                          onChange={(e) => setSelectedImage({ ...selectedImage, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })}
                           className="w-full px-3 py-2 bg-play-surface rounded-lg"
                         />
                       </div>

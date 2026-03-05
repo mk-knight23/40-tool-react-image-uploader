@@ -1,0 +1,15 @@
+# GitHub Pages Configuration
+theme: jekyll-theme-cayman
+title: Visual Asset Vault
+description: Documentation for 40-tool-react-image-uploader
+baseurl: /40-tool-react-image-uploader
+url: https://mk-knight23.github.io
+
+# Navigation
+nav:
+  - title: Home
+    url: /
+  - title: Architecture
+    url: /architecture/
+  - title: API
+    url: /api/
